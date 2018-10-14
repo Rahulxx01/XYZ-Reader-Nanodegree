@@ -17,9 +17,12 @@ import java.util.Date;
 import java.util.GregorianCalendar;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.support.v4.app.ShareCompat;
 import android.support.v7.graphics.Palette;
 import android.text.Html;
+import android.text.Spanned;
 import android.text.format.DateUtils;
 import android.text.method.LinkMovementMethod;
 import android.util.Log;
@@ -42,6 +45,7 @@ import com.example.xyzreader.data.ArticleLoader;
 public class ArticleDetailFragment extends Fragment implements
         LoaderManager.LoaderCallbacks<Cursor> {
     private static final String TAG = "ArticleDetailFragment";
+    private static final int BODY_CONTENT_ID = 322;
 
     public static final String ARG_ITEM_ID = "item_id";
     private static final float PARALLAX_FACTOR = 1.25f;
@@ -113,7 +117,7 @@ public class ArticleDetailFragment extends Fragment implements
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
-            Bundle savedInstanceState) {
+                             Bundle savedInstanceState) {
         mRootView = inflater.inflate(R.layout.fragment_article_detail, container, false);
         mDrawInsetsFrameLayout = (DrawInsetsFrameLayout)
                 mRootView.findViewById(R.id.draw_insets_frame_layout);
@@ -203,7 +207,7 @@ public class ArticleDetailFragment extends Fragment implements
         TextView titleView = (TextView) mRootView.findViewById(R.id.article_title);
         TextView bylineView = (TextView) mRootView.findViewById(R.id.article_byline);
         bylineView.setMovementMethod(new LinkMovementMethod());
-        TextView bodyView = (TextView) mRootView.findViewById(R.id.article_body);
+        final TextView bodyView = (TextView) mRootView.findViewById(R.id.article_body);
 
 
         bodyView.setTypeface(Typeface.createFromAsset(getResources().getAssets(), "Rosario-Regular.ttf"));
@@ -228,11 +232,37 @@ public class ArticleDetailFragment extends Fragment implements
                 // If date is before 1902, just show the string
                 bylineView.setText(Html.fromHtml(
                         outputFormat.format(publishedDate) + " by <font color='#ffffff'>"
-                        + mCursor.getString(ArticleLoader.Query.AUTHOR)
+                                + mCursor.getString(ArticleLoader.Query.AUTHOR)
                                 + "</font>"));
 
             }
-            bodyView.setText(Html.fromHtml(mCursor.getString(ArticleLoader.Query.BODY).replaceAll("(\r\n|\n)", "<br />")));
+            bodyView.setText("....");
+            final String contentText = mCursor.getString(ArticleLoader.Query.BODY);
+            new Handler().postDelayed(new Runnable() {
+                @Override
+                public void run() {
+
+                    final Handler handler = new Handler(){
+
+                        public void handleMessage(Message message) {
+                            switch (message.what){
+                                case BODY_CONTENT_ID:
+                                    bodyView.setText((CharSequence) message.obj);
+                                    break;
+                            }
+                        }
+                    };
+                    Thread thread = new Thread(new Runnable() {
+                        @Override
+                        public void run() {
+                            handler.sendMessage(handler.obtainMessage(BODY_CONTENT_ID, Html.fromHtml(contentText.replaceAll("(\r\n|\n)", "<br />"))));
+                        }
+                    });
+                    thread.start();
+                }
+            }, 1000);
+
+
             ImageLoaderHelper.getInstance(getActivity()).getImageLoader()
                     .get(mCursor.getString(ArticleLoader.Query.PHOTO_URL), new ImageLoader.ImageListener() {
                         @Override
@@ -254,10 +284,12 @@ public class ArticleDetailFragment extends Fragment implements
                         }
                     });
         } else {
-            mRootView.setVisibility(View.GONE);
-            titleView.setText("N/A");
-            bylineView.setText("N/A" );
-            bodyView.setText("N/A");
+            if (bodyView.getText() == null || bodyView.getText().toString().trim().equals("")) {
+                mRootView.setVisibility(View.GONE);
+                titleView.setText("N/A");
+                bylineView.setText("N/A");
+                bodyView.setText("N/A");
+            }
         }
     }
 
